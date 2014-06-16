@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# plugin creado por Daniel Dueñas
+# plugin creado por Daniel Dueï¿½as
 # Plugin para chequeo a traves de snmp de la tarjeta cs121 y otras tarjetas para ups
 
-# plugin developed by Daniel Dueñas
+# plugin developed by Daniel Dueï¿½as
 # This plugin can check a sai with cs121 and other adapters by snmp.
 
 #   This program is free software; you can redistribute it and/or modify
@@ -28,7 +28,7 @@
 
 PROGNAME=`basename $0`
 VERSION="Version 1.0,"
-AUTHOR="2013, Daniel Dueñas Domingo (mail:dduenasd@gmail.com)"
+AUTHOR="2013, Daniel Dueï¿½as Domingo (mail:dduenasd@gmail.com)"
 
 print_version() {
     echo "$VERSION $AUTHOR"
@@ -133,6 +133,9 @@ oid_upsEstimatedMinutesRemaining='1.3.6.1.2.1.33.1.2.3.0'
 oid_upsAlarmsPresent='1.3.6.1.2.1.33.1.6.1.0'
 oid_upsAlarmDescr='1.3.6.1.2.1.33.1.6.2.1.2'
 oid_upsAlarmTime='1.3.6.1.2.1.33.1.6.2.1.3'
+oid_upsBypassNumLines='1.3.6.1.2.1.33.1.5.2'
+oid_upsBypassVoltage='1.3.6.1.2.1.33.1.5.3.1.2'
+
 
 
 num_input_lines(){
@@ -295,6 +298,63 @@ input_voltage(){
    done   
 }
 
+bypass_voltage(){
+   numlines=`getsnmp $4`
+   f_error $?
+   if test $numlines -le 0
+      then echo "error number of lines=$numlines"
+               exit $ST_UK
+   fi
+   counter=1
+   while test $counter -le $numlines
+   do
+      oid="$1.$counter"
+          voltage[$counter]=`getsnmp $oid`
+          f_error $?
+          counter=`expr $counter + 1`
+   done
+   output="Voltage of $numlines bypass lines:"
+   perfdata=""
+   counter=1
+   flag=0
+   warningup=`echo $2 | awk -F: '{print $2}'`
+   warningdown=`echo $2 | awk -F: '{print $1}'`
+   criticalup=`echo $3 | awk -F: '{print $2}'`
+   criticaldown=`echo $3 | awk -F: '{print $1}'`
+   for valor in ${voltage[*]}
+          do
+          if test ${voltage[$counter]} -gt $criticalup
+             then state=$ST_CR
+                      flag=3
+          elif test ${voltage[$counter]} -lt $criticaldown
+             then state=$ST_CR
+                      flag=3
+          elif test ${voltage[$counter]} -gt $warningup
+             then if test $flag -le 2
+                         then state=$ST_WR
+                                 flag=2
+                      fi
+          elif test ${voltage[$counter]} -lt $warningdown
+             then if test $flag -le 2
+                         then state=$ST_WR
+                                 flag=2
+                      fi
+          elif test ${voltage[$counter]} -le $warningup
+             then if test $flag -le 0
+                             then state=$ST_OK
+                      fi
+          else
+             if test $flag -le 1
+                then state=$ST_UK
+                        flag=1
+                 fi
+          fi
+          output=$output" L$counter=${voltage[$counter]}V"
+          perfdata=$perfdata"'L$counter'=${voltage[$counter]};$2;$3;; "
+      counter=`expr $counter + 1`
+   done
+}
+
 battery_status(){
 	val=`getsnmp $1`
 	f_error $?
@@ -417,12 +477,18 @@ case $parameter in
    input_voltage)
         input_voltage $oid_upsInputVoltage $warning $critical $oid_upsInputNumLines
 		;;
+   bypass_voltage)
+        bypass_voltage $oid_upsBypassVoltage $warning $critical $oid_upsBypassNumLines
+                ;;
    num_input_lines)
 		num_input_lines $oid_upsInputNumLines
 		;;
    num_output_lines)
 		num_output_lines $oid_upsOutputNumLines
 		;;
+   num_bypass_lines)
+                num_bypass_lines $oid_upsBypassNumLines
+                ;;
    battery_status)
 		battery_status $oid_upsBatteryStatus
 		;;
